@@ -6,25 +6,81 @@
 
 ### Задание 1
 
-`Приведите ответ в свободной форме........`
+1. Возьмите из демонстрации к лекции готовый код для создания ВМ с помощью remote-модуля.
+2. Создайте одну ВМ, используя этот модуль. В файле cloud-init.yml необходимо использовать переменную для ssh-ключа вместо хардкода. Передайте ssh-ключ в функцию template_file в блоке vars ={} . Воспользуйтесь примером. Обратите внимание, что ssh-authorized-keys принимает в себя список, а не строку.
+3. Добавьте в файл cloud-init.yml установку nginx.
+4. Предоставьте скриншот подключения к консоли и вывод команды sudo nginx -t.
 
-1. `Заполните здесь этапы выполнения, если требуется ....`
-2. `Заполните здесь этапы выполнения, если требуется ....`
-3. `Заполните здесь этапы выполнения, если требуется ....`
-4. `Заполните здесь этапы выполнения, если требуется ....`
-5. `Заполните здесь этапы выполнения, если требуется ....`
-6. 
+### Ответ:
 
+Возьмем файл [main.tf](src%2Fmain.tf) из демонстрации, отредактируем его, изменим количество и добавим строчку ```vars = {public_key = var.public_key}``` в функцию ```template_file```:
 ```
-Поле для вставки кода...
-....
-....
-....
-....
-```
+#создаем облачную сеть
+resource "yandex_vpc_network" "develop" {
+  name = "develop"
+}
 
-`При необходимости прикрепитe сюда скриншоты
-![Название скриншота 1](ссылка на скриншот 1)`
+#создаем подсеть
+resource "yandex_vpc_subnet" "develop" {
+  name           = "develop-ru-central1-a"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.develop.id
+  v4_cidr_blocks = ["10.0.1.0/24"]
+}
+
+module "test-vm" {
+  source          = "git::https://github.com/udjin10/yandex_compute_instance.git?ref=main"
+  env_name        = "develop"
+  network_id      = yandex_vpc_network.develop.id
+  subnet_zones    = ["ru-central1-a"]
+  subnet_ids      = [ yandex_vpc_subnet.develop.id ]
+  instance_name   = "web"
+  instance_count  = 1
+  image_family    = "ubuntu-2004-lts"
+  public_ip       = true
+
+  metadata = {
+      user-data          = data.template_file.cloudinit.rendered #Для демонстрации №3
+      serial-port-enable = 1
+  }
+
+}
+
+#Пример передачи cloud-config в ВМ для демонстрации №3
+data "template_file" "cloudinit" {
+ template = file("./cloud-init.yml")
+  vars = {public_key = var.public_key}
+}
+```
+Добавим переменную ```public_key``` в [variables.tf](src%2Fvariables.tf), а в ```personal.auto.tfvars``` вынесем значение ключа:
+```
+variable "public_key" {
+  type    = string
+  default = ""
+}
+```
+Откорректируем файл [cloud-init.yml](src%2Fcloud-init.yml) из примера, добавив ссылку на ключ, установку и запуск nginx:
+```
+#cloud-config
+users:
+  - name: ubuntu
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh_authorized_keys:
+      - ${public_key}
+package_update: true
+package_upgrade: false
+packages:
+ - vim
+ - nginx
+runcmd:
+  - systemctl enable nginx 
+  - systemctl start nginx
+```
+Создадим ВМ, подключимся по ssh и проверим вывод команды ```sudo nginx -t```:
+![task_1_1.png](img%2Ftask_1_1.png)
+![task_1_2.png](img%2Ftask_1_2.png)
 
 
 ---
