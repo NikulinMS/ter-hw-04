@@ -87,26 +87,143 @@ runcmd:
 
 ### Задание 2
 
-`Приведите ответ в свободной форме........`
+1. Напишите локальный модуль vpc, который будет создавать 2 ресурса: одну сеть и одну подсеть в зоне, объявленной при вызове модуля, например: ru-central1-a.
+2. Вы должны передать в модуль переменные с названием сети, zone и v4_cidr_blocks.
+3. Модуль должен возвращать в root module с помощью output информацию о yandex_vpc_subnet. Пришлите скриншот информации из terraform console о своем модуле. Пример: > module.vpc_dev
+4. Замените ресурсы yandex_vpc_network и yandex_vpc_subnet созданным модулем. Не забудьте передать необходимые параметры сети из модуля vpc в модуль с виртуальной машиной.
+5. Откройте terraform console и предоставьте скриншот содержимого модуля. Пример: > module.vpc_dev.
+6. Сгенерируйте документацию к модулю с помощью terraform-docs.
 
-1. `Заполните здесь этапы выполнения, если требуется ....`
-2. `Заполните здесь этапы выполнения, если требуется ....`
-3. `Заполните здесь этапы выполнения, если требуется ....`
-4. `Заполните здесь этапы выполнения, если требуется ....`
-5. `Заполните здесь этапы выполнения, если требуется ....`
-6. 
+### Ответ:
 
+Создадим директорию [vpc_dev](src%2Fvpc_dev) и разместим в ней файлы 
+[main.tf](src%2Fvpc_dev%2Fmain.tf)
 ```
-Поле для вставки кода...
-....
-....
-....
-....
+resource "yandex_vpc_network" "develop" {
+  name = var.vpc_name
+}
+
+resource "yandex_vpc_subnet" "develop" {
+  name = var.vpc_name
+  zone = var.default_zone
+  network_id     = yandex_vpc_network.develop.id
+  v4_cidr_blocks = var.default_cidr
+}
 ```
+[outputs.tf](src%2Fvpc_dev%2Foutputs.tf)
+```
+output "network_id" {
+  value = yandex_vpc_network.develop.id
+}
 
-`При необходимости прикрепитe сюда скриншоты
-![Название скриншота 2](ссылка на скриншот 2)`
+output "subnet_id" {
+  value = yandex_vpc_subnet.develop.id
+}
+```
+[providers.tf](src%2Fvpc_dev%2Fproviders.tf)
+```
+terraform {
+  required_providers {
+    yandex = {
+      source = "yandex-cloud/yandex"
+    }
+  }
+  required_version = ">=0.13"
+}
+```
+[variables.tf](src%2Fvpc_dev%2Fvariables.tf)
+```
+variable "default_zone" {
+  type = string
+  default = "ru-central1-a"
+  description = "https://cloud.yandex.ru/docs/overview/concepts/geo-scope"
+}
 
+variable "default_cidr" {
+  type = list(string)
+  default = ["10.0.1.0/24"]
+  description = "https://cloud.yandex.ru/docs/vpc/operations/subnet-create"
+}
+
+variable "vpc_name" {
+  type = string
+  default = "develop"
+  description = "VPC network&subnet name"
+}
+```
+Внесем правки в первоначальный файл ```main.tf```, ссылка [main_2.tf](src%2Fmain_2.tf), внесем данные по новому модулю:
+```
+module "vpc_dev" {
+  source = "./vpc_dev"
+}
+
+module "test-vm" {
+  source          = "git::https://github.com/udjin10/yandex_compute_instance.git?ref=main"
+  env_name        = "develop"
+  network_id      = module.vpc_dev.network_id
+  subnet_zones    = ["ru-central1-a"]
+  subnet_ids      = [ module.vpc_dev.subnet_id ]
+  instance_name   = "web"
+  instance_count  = 1
+  image_family    = "ubuntu-2004-lts"
+  public_ip       = true
+
+  metadata = {
+      user-data          = data.template_file.cloudinit.rendered
+      serial-port-enable = 1
+  }
+
+}
+
+data "template_file" "cloudinit" {
+ template = file("./cloud-init.yml")
+  vars = {public_key = var.public_key}
+}
+```
+![task_2_1.png](img%2Ftask_2_1.png)
+
+Сгенерируем документацию к модулю с помощью terraform-docs:
+
+<!-- BEGIN_TF_DOCS -->
+## Requirements
+
+| Name | Version |
+|------|--------|
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >=0.13 |
+| <a name="requirement_yandex"></a> [yandex](#requirement\_yandex) | 0.99.1 |
+
+## Providers
+
+| Name | Version |
+|------|---------|
+| <a name="provider_yandex"></a> [yandex](#provider\_yandex) | 0.99.1 |
+
+## Modules
+
+No modules.
+
+## Resources
+
+| Name | Type |
+|------|------|
+| [yandex_vpc_network.develop](https://registry.terraform.io/providers/yandex-cloud/yandex/0.99.1/docs/resources/vpc_network) | resource |
+| [yandex_vpc_subnet.develop](https://registry.terraform.io/providers/yandex-cloud/yandex/0.99.1/docs/resources/vpc_subnet) | resource |
+
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| <a name="input_default_cidr"></a> [default\_cidr](#input\_default\_cidr) | https://cloud.yandex.ru/docs/vpc/operations/subnet-create | `list(string)` | <pre>[<br>  "10.0.1.0/24"<br>]</pre> | no |
+| <a name="input_default_zone"></a> [default\_zone](#input\_default\_zone) | https://cloud.yandex.ru/docs/overview/concepts/geo-scope | `string` | `"ru-central1-a"` | no |
+| <a name="input_vpc_name"></a> [vpc\_name](#input\_vpc\_name) | VPC network&subnet name | `string` | `"develop"` | no |
+
+## Outputs
+
+| Name | Description |
+|------|-------------|
+| <a name="output_network_id"></a> [network\_id](#output\_network\_id) | n/a |
+| <a name="output_subnet_id"></a> [subnet\_id](#output\_subnet\_id) | n/a |
+<!-- END_TF_DOCS -->
 
 ---
 
